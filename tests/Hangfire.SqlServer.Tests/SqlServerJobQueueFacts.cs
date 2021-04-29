@@ -1,7 +1,7 @@
 ﻿extern alias ReferencedDapper;
 
 using System;
-using System.Data.SqlClient;
+using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using ReferencedDapper::Dapper;
@@ -35,8 +35,9 @@ namespace Hangfire.SqlServer.Tests
             Assert.Equal("options", exception.ParamName);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsNull()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsNull(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -46,11 +47,12 @@ namespace Hangfire.SqlServer.Tests
                     () => queue.Dequeue(null, CreateTimingOutCancellationToken()));
 
                 Assert.Equal("queues", exception.ParamName);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsEmpty()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldThrowAnException_WhenQueuesCollectionIsEmpty(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -60,11 +62,12 @@ namespace Hangfire.SqlServer.Tests
                     () => queue.Dequeue(new string[0], CreateTimingOutCancellationToken()));
 
                 Assert.Equal("queues", exception.ParamName);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact]
-        public void Dequeue_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -74,11 +77,12 @@ namespace Hangfire.SqlServer.Tests
 
                 Assert.Throws<OperationCanceledException>(
                     () => queue.Dequeue(DefaultQueues, cts.Token));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldWaitIndefinitely_WhenThereAreNoJobs()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldWaitIndefinitely_WhenThereAreNoJobs(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -87,14 +91,15 @@ namespace Hangfire.SqlServer.Tests
 
                 Assert.Throws<OperationCanceledException>(
                     () => queue.Dequeue(DefaultQueues, cts.Token));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldFetchAJob_FromTheSpecifiedQueue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldFetchAJob_FromTheSpecifiedQueue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.JobQueue (JobId, Queue)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (@jobId, @queue);
 select scope_identity() as Id;";
 
@@ -115,14 +120,15 @@ select scope_identity() as Id;";
                 // Assert
                 Assert.Equal("1", payload.JobId);
                 Assert.Equal("default", payload.Queue);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_FetchesAJob_WhenJobIdIsLongValue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_FetchesAJob_WhenJobIdIsLongValue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.JobQueue (JobId, Queue)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (@jobId, @queue);
 select scope_identity() as Id;";
 
@@ -142,16 +148,17 @@ select scope_identity() as Id;";
 
                 // Assert
                 Assert.Equal((int.MaxValue + 1L).ToString(), payload.JobId);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldDeleteAJob()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldDeleteAJob(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             // Arrange
@@ -170,18 +177,19 @@ values (scope_identity(), @queue)";
                 // Assert
                 Assert.NotNull(payload);
 
-                var jobInQueue = connection.Query("select * from HangFire.JobQueue").SingleOrDefault();
+                var jobInQueue = connection.Query($"select * from [{Constants.DefaultSchema}].JobQueue").SingleOrDefault();
                 Assert.Null(jobInQueue);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldFetchTimedOutJobs_FromTheSpecifiedQueue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldFetchTimedOutJobs_FromTheSpecifiedQueue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, dateadd(minute, -60, getutcdate()))
-insert into HangFire.JobQueue (JobId, Queue, FetchedAt)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue, FetchedAt)
 values (scope_identity(), @queue, @fetchedAt)";
 
             // Arrange
@@ -205,16 +213,17 @@ values (scope_identity(), @queue, @fetchedAt)";
 
                 // Assert
                 Assert.NotEmpty(payload.JobId);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldSetFetchedAt_OnlyForTheFetchedJob()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldSetFetchedAt_OnlyForTheFetchedJob(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             // Arrange
@@ -236,20 +245,21 @@ values (scope_identity(), @queue)";
 
                 // Assert
                 var otherJobFetchedAt = connection.Query<DateTime?>(
-                    "select FetchedAt from HangFire.JobQueue where JobId != @id",
+                    $"select FetchedAt from [{Constants.DefaultSchema}].JobQueue where JobId != @id",
                     new { id = payload.JobId }).Single();
 
                 Assert.Null(otherJobFetchedAt);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldFetchJobs_OnlyFromSpecifiedQueues()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldFetchJobs_OnlyFromSpecifiedQueues(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             UseConnection(connection =>
@@ -264,16 +274,17 @@ values (scope_identity(), @queue)";
                     () => queue.Dequeue(
                         DefaultQueues,
                         CreateTimingOutCancellationToken()));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_ShouldFetchJobs_FromMultipleQueues()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_ShouldFetchJobs_FromMultipleQueues(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             UseConnection(connection =>
@@ -301,12 +312,13 @@ values (scope_identity(), @queue)";
 
                 Assert.NotNull(@default.JobId);
                 Assert.Equal("default", @default.Queue);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
         //---
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldThrowAnException_WhenQueuesCollectionIsNull()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldThrowAnException_WhenQueuesCollectionIsNull(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -316,11 +328,12 @@ values (scope_identity(), @queue)";
                     () => queue.Dequeue(null, CreateTimingOutCancellationToken()));
 
                 Assert.Equal("queues", exception.ParamName);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldThrowAnException_WhenQueuesCollectionIsEmpty()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldThrowAnException_WhenQueuesCollectionIsEmpty(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -330,11 +343,12 @@ values (scope_identity(), @queue)";
                     () => queue.Dequeue(new string[0], CreateTimingOutCancellationToken()));
 
                 Assert.Equal("queues", exception.ParamName);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact]
-        public void Dequeue_InvisibilityTimeout_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ThrowsOperationCanceled_WhenCancellationTokenIsSetAtTheBeginning(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -344,11 +358,12 @@ values (scope_identity(), @queue)";
 
                 Assert.Throws<OperationCanceledException>(
                     () => queue.Dequeue(DefaultQueues, cts.Token));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldWaitIndefinitely_WhenThereAreNoJobs()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldWaitIndefinitely_WhenThereAreNoJobs(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -357,14 +372,15 @@ values (scope_identity(), @queue)";
 
                 Assert.Throws<OperationCanceledException>(
                     () => queue.Dequeue(DefaultQueues, cts.Token));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldFetchAJob_FromTheSpecifiedQueue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldFetchAJob_FromTheSpecifiedQueue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.JobQueue (JobId, Queue)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (@jobId, @queue);
 select scope_identity() as Id;";
 
@@ -385,16 +401,17 @@ select scope_identity() as Id;";
                 Assert.Equal(id, payload.Id);
                 Assert.Equal("1", payload.JobId);
                 Assert.Equal("default", payload.Queue);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldLeaveJobInTheQueue_ButSetItsFetchedAtValue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldLeaveJobInTheQueue_ButSetItsFetchedAtValue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             // Arrange
@@ -414,21 +431,22 @@ values (scope_identity(), @queue)";
                 Assert.NotNull(payload);
 
                 var fetchedAt = connection.Query<DateTime?>(
-                    "select FetchedAt from HangFire.JobQueue where JobId = @id",
+                    $"select FetchedAt from [{Constants.DefaultSchema}].JobQueue where JobId = @id",
                     new { id = payload.JobId }).Single();
 
                 Assert.NotNull(fetchedAt);
                 Assert.True(fetchedAt > DateTime.UtcNow.AddMinutes(-1));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldFetchATimedOutJobs_FromTheSpecifiedQueue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldFetchATimedOutJobs_FromTheSpecifiedQueue(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue, FetchedAt)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue, FetchedAt)
 values (scope_identity(), @queue, @fetchedAt)";
 
             // Arrange
@@ -452,16 +470,17 @@ values (scope_identity(), @queue, @fetchedAt)";
 
                 // Assert
                 Assert.NotEmpty(payload.JobId);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldSetFetchedAt_OnlyForTheFetchedJob()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldSetFetchedAt_OnlyForTheFetchedJob(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             // Arrange
@@ -483,20 +502,21 @@ values (scope_identity(), @queue)";
 
                 // Assert
                 var otherJobFetchedAt = connection.Query<DateTime?>(
-                    "select FetchedAt from HangFire.JobQueue where JobId != @id",
+                    $"select FetchedAt from [{Constants.DefaultSchema}].JobQueue where JobId != @id",
                     new { id = payload.JobId }).Single();
 
                 Assert.Null(otherJobFetchedAt);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldFetchJobs_OnlyFromSpecifiedQueues()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldFetchJobs_OnlyFromSpecifiedQueues(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             UseConnection(connection =>
@@ -511,16 +531,17 @@ values (scope_identity(), @queue)";
                     () => queue.Dequeue(
                         DefaultQueues,
                         CreateTimingOutCancellationToken()));
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Dequeue_InvisibilityTimeout_ShouldFetchJobs_FromMultipleQueues()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Dequeue_InvisibilityTimeout_ShouldFetchJobs_FromMultipleQueues(bool useMicrosoftDataSqlClient)
         {
-            const string arrangeSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt)
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt)
 values (@invocationData, @arguments, getutcdate())
-insert into HangFire.JobQueue (JobId, Queue)
+insert into [{Constants.DefaultSchema}].JobQueue (JobId, Queue)
 values (scope_identity(), @queue)";
 
             UseConnection(connection =>
@@ -548,11 +569,12 @@ values (scope_identity(), @queue)";
 
                 Assert.NotNull(@default.JobId);
                 Assert.Equal("default", @default.Queue);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Enqueue_AddsAJobToTheQueue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Enqueue_AddsAJobToTheQueue(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -568,15 +590,16 @@ values (scope_identity(), @queue)";
                 queue.Enqueue(connection, "default", "1");
 #endif
 
-                var record = connection.Query("select * from HangFire.JobQueue").Single();
+                var record = connection.Query($"select * from [{Constants.DefaultSchema}].JobQueue").Single();
                 Assert.Equal("1", record.JobId.ToString());
                 Assert.Equal("default", record.Queue);
                 Assert.Null(record.FetchedAt);
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
-        [Fact, CleanDatabase]
-        public void Enqueue_AddsAJob_WhenIdIsLongValue()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Enqueue_AddsAJob_WhenIdIsLongValue(bool useMicrosoftDataSqlClient)
         {
             UseConnection(connection =>
             {
@@ -592,9 +615,9 @@ values (scope_identity(), @queue)";
                 queue.Enqueue(connection, "default", (int.MaxValue + 1L).ToString());
 #endif
 
-                var record = connection.Query("select * from HangFire.JobQueue").Single();
+                var record = connection.Query($"select * from [{Constants.DefaultSchema}].JobQueue").Single();
                 Assert.Equal((int.MaxValue + 1L).ToString(), record.JobId.ToString());
-            });
+            }, useMicrosoftDataSqlClient);
         }
 
         private static CancellationToken CreateTimingOutCancellationToken()
@@ -605,15 +628,15 @@ values (scope_identity(), @queue)";
 
         public static void Sample(string arg1, string arg2) { }
 
-        private static SqlServerJobQueue CreateJobQueue(SqlConnection connection, TimeSpan? invisibilityTimeout)
+        private static SqlServerJobQueue CreateJobQueue(DbConnection connection, TimeSpan? invisibilityTimeout)
         {
             var storage = new SqlServerStorage(connection);
             return new SqlServerJobQueue(storage, new SqlServerStorageOptions { SlidingInvisibilityTimeout = invisibilityTimeout });
         }
 
-        private static void UseConnection(Action<SqlConnection> action)
+        private static void UseConnection(Action<DbConnection> action, bool useMicrosoftDataSqlClient)
         {
-            using (var connection = ConnectionUtils.CreateConnection())
+            using (var connection = ConnectionUtils.CreateConnection(useMicrosoftDataSqlClient))
             {
                 action(connection);
             }

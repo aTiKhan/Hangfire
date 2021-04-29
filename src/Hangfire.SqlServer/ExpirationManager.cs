@@ -16,7 +16,6 @@
 
 using System;
 using System.Data.Common;
-using System.Data.SqlClient;
 using System.Threading;
 using Hangfire.Common;
 using Hangfire.Logging;
@@ -37,7 +36,7 @@ namespace Hangfire.SqlServer
         // appears, when ~5000 locks were taken, but this number is a subject of version).
         // Note, that lock escalation may also happen during the cascade deletions for
         // State (3-5 rows/job usually) and JobParameters (2-3 rows/job usually) tables.
-        private const int NumberOfRecordsInSinglePass = 1000;
+        private const int DefaultNumberOfRecordsInSinglePass = 1000;
         
         private static readonly string[] ProcessedTables =
         {
@@ -62,6 +61,12 @@ namespace Hangfire.SqlServer
 
         public void Execute(CancellationToken cancellationToken)
         {
+            var numberOfRecordsInSinglePass = _storage.Options.DeleteExpiredBatchSize;
+            if (numberOfRecordsInSinglePass <= 0 || numberOfRecordsInSinglePass > 100_000)
+            {
+                numberOfRecordsInSinglePass = DefaultNumberOfRecordsInSinglePass;
+            }
+
             foreach (var table in ProcessedTables)
             {
                 _logger.Debug($"Removing outdated records from the '{table}' table...");
@@ -75,11 +80,10 @@ namespace Hangfire.SqlServer
                         affected = ExecuteNonQuery(
                             connection,
                             GetExpireQuery(_storage.SchemaName, table),
-                            cancellationToken,
-                            new SqlParameter("@count", NumberOfRecordsInSinglePass),
-                            new SqlParameter("@now", DateTime.UtcNow));
+                            numberOfRecordsInSinglePass,
+                            cancellationToken);
 
-                    } while (affected == NumberOfRecordsInSinglePass);
+                    } while (affected == numberOfRecordsInSinglePass);
                 });
 
                 _logger.Trace($"Outdated records removed from the '{table}' table.");
@@ -128,6 +132,7 @@ It will be retried in {_checkInterval.TotalSeconds} seconds.",
             return $@"
 set deadlock_priority low;
 set transaction isolation level read committed;
+set xact_abort on;
 set lock_timeout 1000;
 delete top (@count) from [{schemaName}].[{table}]
 where ExpireAt < @now
@@ -137,22 +142,32 @@ option (loop join, optimize for (@count = 20000));";
         private static int ExecuteNonQuery(
             DbConnection connection,
             string commandText,
-            CancellationToken cancellationToken,
-            params SqlParameter[] parameters)
+            int numberOfRecordsInSinglePass,
+            CancellationToken cancellationToken)
         {
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = commandText;
-                command.Parameters.AddRange(parameters);
                 command.CommandTimeout = 0;
 
-                using (cancellationToken.Register(state => ((SqlCommand)state).Cancel(), command))
+                var countParameter = command.CreateParameter();
+                countParameter.ParameterName = "@count";
+                countParameter.Value = numberOfRecordsInSinglePass;
+
+                var nowParameter = command.CreateParameter();
+                nowParameter.ParameterName = "@now";
+                nowParameter.Value = DateTime.UtcNow;
+
+                command.Parameters.Add(countParameter);
+                command.Parameters.Add(nowParameter);
+
+                using (cancellationToken.Register(state => ((DbCommand)state).Cancel(), command))
                 {
                     try
                     {
                         return command.ExecuteNonQuery();
                     }
-                    catch (SqlException) when (cancellationToken.IsCancellationRequested)
+                    catch (DbException ex) when (cancellationToken.IsCancellationRequested || ex.Message.Contains("Lock request time out period exceeded"))
                     {
                         // Exception was triggered due to the Cancel method call, ignoring
                         return 0;

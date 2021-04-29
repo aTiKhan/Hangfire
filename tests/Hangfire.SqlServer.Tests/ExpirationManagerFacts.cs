@@ -1,7 +1,7 @@
 ﻿extern alias ReferencedDapper;
 
 using System;
-using System.Data.SqlClient;
+using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using ReferencedDapper::Dapper;
@@ -19,10 +19,11 @@ namespace Hangfire.SqlServer.Tests
             Assert.Throws<ArgumentNullException>(() => new ExpirationManager(null, TimeSpan.Zero));
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_RemovesOutdatedRecords()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_RemovesOutdatedRecords(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 CreateExpirationEntry(connection, DateTime.UtcNow.AddMonths(-1));
                 var manager = CreateManager(connection);
@@ -33,10 +34,11 @@ namespace Hangfire.SqlServer.Tests
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_DoesNotRemoveEntries_WithNoExpirationTimeSet()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_DoesNotRemoveEntries_WithNoExpirationTimeSet(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 CreateExpirationEntry(connection, null);
                 var manager = CreateManager(connection);
@@ -47,10 +49,11 @@ namespace Hangfire.SqlServer.Tests
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_DoesNotRemoveEntries_WithFreshExpirationTime()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_DoesNotRemoveEntries_WithFreshExpirationTime(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 CreateExpirationEntry(connection, DateTime.UtcNow.AddMonths(1));
                 var manager = CreateManager(connection);
@@ -61,14 +64,15 @@ namespace Hangfire.SqlServer.Tests
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_Processes_AggregatedCounterTable()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_Processes_AggregatedCounterTable(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 // Arrange
-                const string createSql = @"
-insert into HangFire.AggregatedCounter ([Key], [Value], ExpireAt) 
+                var createSql = $@"
+insert into [{Constants.DefaultSchema}].AggregatedCounter ([Key], [Value], ExpireAt) 
 values ('key', 1, @expireAt)";
                 connection.Execute(createSql, new { expireAt = DateTime.UtcNow.AddMonths(-1) });
 
@@ -78,18 +82,19 @@ values ('key', 1, @expireAt)";
                 manager.Execute(_cts.Token);
 
                 // Assert
-                Assert.Equal(0, connection.Query<int>(@"select count(*) from HangFire.Counter").Single());
+                Assert.Equal(0, connection.Query<int>($"select count(*) from [{Constants.DefaultSchema}].Counter").Single());
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_Processes_JobTable()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_Processes_JobTable(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 // Arrange
-                const string createSql = @"
-insert into HangFire.Job (InvocationData, Arguments, CreatedAt, ExpireAt) 
+                var createSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, CreatedAt, ExpireAt) 
 values ('', '', getutcdate(), @expireAt)";
                 connection.Execute(createSql, new { expireAt = DateTime.UtcNow.AddMonths(-1) });
 
@@ -99,18 +104,19 @@ values ('', '', getutcdate(), @expireAt)";
                 manager.Execute(_cts.Token);
 
                 // Assert
-                Assert.Equal(0, connection.Query<int>(@"select count(*) from HangFire.Job").Single());
+                Assert.Equal(0, connection.Query<int>($"select count(*) from [{Constants.DefaultSchema}].Job").Single());
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_Processes_ListTable()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_Processes_ListTable(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 // Arrange
-                const string createSql = @"
-insert into HangFire.List ([Key], ExpireAt) 
+                var createSql = $@"
+insert into [{Constants.DefaultSchema}].List ([Key], ExpireAt) 
 values ('key', @expireAt)";
                 connection.Execute(createSql, new { expireAt = DateTime.UtcNow.AddMonths(-1) });
 
@@ -120,18 +126,19 @@ values ('key', @expireAt)";
                 manager.Execute(_cts.Token);
 
                 // Assert
-                Assert.Equal(0, connection.Query<int>(@"select count(*) from HangFire.List").Single());
+                Assert.Equal(0, connection.Query<int>($"select count(*) from [{Constants.DefaultSchema}].List").Single());
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_Processes_SetTable()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_Processes_SetTable(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 // Arrange
-                const string createSql = @"
-insert into HangFire.[Set] ([Key], [Score], [Value], ExpireAt) 
+                var createSql = $@"
+insert into [{Constants.DefaultSchema}].[Set] ([Key], [Score], [Value], ExpireAt) 
 values ('key', 0, '', @expireAt)";
                 connection.Execute(createSql, new { expireAt = DateTime.UtcNow.AddMonths(-1) });
 
@@ -141,18 +148,19 @@ values ('key', 0, '', @expireAt)";
                 manager.Execute(_cts.Token);
 
                 // Assert
-                Assert.Equal(0, connection.Query<int>(@"select count(*) from HangFire.[Set]").Single());
+                Assert.Equal(0, connection.Query<int>($"select count(*) from [{Constants.DefaultSchema}].[Set]").Single());
             }
         }
 
-        [Fact, CleanDatabase]
-        public void Execute_Processes_HashTable()
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void Execute_Processes_HashTable(bool useMicrosoftDataSqlClient)
         {
-            using (var connection = CreateConnection())
+            using (var connection = CreateConnection(useMicrosoftDataSqlClient))
             {
                 // Arrange
-                const string createSql = @"
-insert into HangFire.Hash ([Key], [Field], [Value], ExpireAt) 
+                var createSql = $@"
+insert into [{Constants.DefaultSchema}].Hash ([Key], [Field], [Value], ExpireAt) 
 values ('key', 'field', '', @expireAt)";
                 connection.Execute(createSql, new { expireAt = DateTime.UtcNow.AddMonths(-1) });
 
@@ -162,32 +170,32 @@ values ('key', 'field', '', @expireAt)";
                 manager.Execute(_cts.Token);
 
                 // Assert
-                Assert.Equal(0, connection.Query<int>(@"select count(*) from HangFire.Hash").Single());
+                Assert.Equal(0, connection.Query<int>($"select count(*) from [{Constants.DefaultSchema}].Hash").Single());
             }
         }
 
-        private static void CreateExpirationEntry(SqlConnection connection, DateTime? expireAt)
+        private static void CreateExpirationEntry(DbConnection connection, DateTime? expireAt)
         {
-            const string insertSql = @"
-insert into HangFire.AggregatedCounter ([Key], [Value], [ExpireAt])
+            var insertSql = $@"
+insert into [{Constants.DefaultSchema}].AggregatedCounter ([Key], [Value], [ExpireAt])
 values (N'key', 1, @expireAt)";
 
             connection.Execute(insertSql, new { expireAt });
         }
 
-        private static bool IsEntryExpired(SqlConnection connection)
+        private static bool IsEntryExpired(DbConnection connection)
         {
             var count = connection.Query<int>(
-                    "select count(*) from HangFire.AggregatedCounter where [Key] = N'key'").Single();
+                    $"select count(*) from [{Constants.DefaultSchema}].AggregatedCounter where [Key] = N'key'").Single();
             return count == 0;
         }
 
-        private SqlConnection CreateConnection()
+        private DbConnection CreateConnection(bool useMicrosoftDataSqlClient)
         {
-            return ConnectionUtils.CreateConnection();
+            return ConnectionUtils.CreateConnection(useMicrosoftDataSqlClient);
         }
 
-        private ExpirationManager CreateManager(SqlConnection connection)
+        private ExpirationManager CreateManager(DbConnection connection)
         {
             var storage = new SqlServerStorage(connection);
             return new ExpirationManager(storage, TimeSpan.Zero);

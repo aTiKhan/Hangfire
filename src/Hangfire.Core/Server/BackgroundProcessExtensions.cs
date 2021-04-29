@@ -36,12 +36,32 @@ namespace Hangfire.Server
             [NotNull] this IBackgroundProcess process,
             int threadCount)
         {
+            return UseBackgroundPool(process, threadCount, null);
+        }
+
+        public static IBackgroundProcessDispatcherBuilder UseBackgroundPool(
+            [NotNull] this IBackgroundProcess process,
+            int threadCount,
+            [CanBeNull] Action<Thread> threadConfig)
+        {
             if (process == null) throw new ArgumentNullException(nameof(process));
             if (threadCount <= 0) throw new ArgumentOutOfRangeException(nameof(threadCount));
 
+            return UseBackgroundPool(
+                process,
+                (threadName, threadStart) => DefaultThreadFactory(threadCount, threadName, threadStart, threadConfig));
+        }
+
+        public static IBackgroundProcessDispatcherBuilder UseBackgroundPool(
+            [NotNull] this IBackgroundProcess process,
+            [NotNull] Func<string, ThreadStart, IEnumerable<Thread>> threadFactory)
+        {
+            if (process == null) throw new ArgumentNullException(nameof(process));
+            if (threadFactory == null) throw new ArgumentNullException(nameof(threadFactory));
+
             return new BackgroundProcessDispatcherBuilder(
                 process,
-                threadStart => DefaultThreadFactory(threadCount, process.GetType().Name, threadStart));
+                threadStart => threadFactory(process.GetType().Name, threadStart));
         }
 
         public static IBackgroundProcessDispatcherBuilder UseBackgroundPool(
@@ -69,8 +89,23 @@ namespace Hangfire.Server
             if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency));
             if (threadCount <= 0) throw new ArgumentOutOfRangeException(nameof(threadCount));
 
+            return UseBackgroundPool(
+                process,
+                maxConcurrency,
+                (threadName, threadStart) => DefaultThreadFactory(threadCount, threadName, threadStart));
+        }
+
+        public static IBackgroundProcessDispatcherBuilder UseBackgroundPool(
+            [NotNull] this IBackgroundProcessAsync process,
+            int maxConcurrency,
+            [NotNull] Func<string, ThreadStart, IEnumerable<Thread>> threadFactory)
+        {
+            if (process == null) throw new ArgumentNullException(nameof(process));
+            if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency));
+            if (threadFactory == null) throw new ArgumentNullException(nameof(threadFactory));
+
             Func<TaskScheduler> createScheduler = () => new BackgroundTaskScheduler(
-                threadStart => DefaultThreadFactory(threadCount, process.GetType().Name, threadStart),
+                threadStart => threadFactory(process.GetType().Name, threadStart),
                 exception =>
                 {
                     LogProvider.GetLogger(typeof(BackgroundTaskScheduler)).FatalException(
@@ -100,7 +135,8 @@ namespace Hangfire.Server
         internal static IEnumerable<Thread> DefaultThreadFactory(
             int threadCount,
             [NotNull] string threadName,
-            [NotNull] ThreadStart threadStart)
+            [NotNull] ThreadStart threadStart,
+            [CanBeNull] Action<Thread> threadConfig = null)
         {
             if (threadName == null) throw new ArgumentNullException(nameof(threadName));
             if (threadStart == null) throw new ArgumentNullException(nameof(threadStart));
@@ -108,11 +144,14 @@ namespace Hangfire.Server
 
             for (var i = 0; i < threadCount; i++)
             {
-                yield return new Thread(threadStart)
+                var thread = new Thread(threadStart)
                 {
                     IsBackground = true,
                     Name = $"{threadName} #{i + 1}"
                 };
+
+                threadConfig?.Invoke(thread);
+                yield return thread;
             }
         }
     }

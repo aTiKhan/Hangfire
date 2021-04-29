@@ -43,6 +43,7 @@ namespace Hangfire.SqlServer
         private readonly Func<DbConnection> _connectionFactory;
         private readonly SqlServerStorageOptions _options;
         private readonly string _connectionString;
+        private string _escapedSchemaName;
 
         public SqlServerStorage(string nameOrConnectionString)
             : this(nameOrConnectionString, new SqlServerStorageOptions())
@@ -129,7 +130,7 @@ namespace Hangfire.SqlServer
 
         public override bool LinearizableReads => true;
 
-        internal string SchemaName => _options.SchemaName;
+        internal string SchemaName => _escapedSchemaName;
         internal int? CommandTimeout => _options.CommandTimeout.HasValue ? (int)_options.CommandTimeout.Value.TotalSeconds : (int?)null;
         internal int? CommandBatchMaxTimeout => _options.CommandBatchMaxTimeout.HasValue ? (int)_options.CommandBatchMaxTimeout.Value.TotalSeconds : (int?)null;
         internal TimeSpan? SlidingInvisibilityTimeout => _options.SlidingInvisibilityTimeout;
@@ -164,6 +165,11 @@ namespace Hangfire.SqlServer
 
             try
             {
+                if (_connectionString == null)
+                {
+                    return "SQL Server (custom)";
+                }
+
                 var parts = _connectionString.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Split(new[] { '=' }, StringSplitOptions.RemoveEmptyEntries))
                     .Select(x => new { Key = x[0].Trim(), Value = x[1].Trim() })
@@ -266,8 +272,37 @@ namespace Hangfire.SqlServer
             {
                 using (var transaction = connection.BeginTransaction(isolationLevel ?? IsolationLevel.ReadCommitted))
                 {
-                    var result = func(connection, transaction);
-                    transaction.Commit();
+                    T result;
+
+                    try
+                    {
+                        result = func(connection, transaction);
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        // It is possible that XACT_ABORT option is set, and in this
+                        // case transaction will be aborted automatically on server.
+                        // Some older SqlClient implementations throw InvalidOperationException
+                        // when trying to rollback such an aborted transaction, so we
+                        // try to handle this case.
+                        //
+                        // It's also possible that our connection is broken, so this
+                        // check is useful even when XACT_ABORT option wasn't set.
+                        if (transaction.Connection != null)
+                        {
+                            // Don't rely on implicit rollback when calling the Dispose
+                            // method, because some implementations may throw the
+                            // NullReferenceException, although it's prohibited to throw
+                            // any exception from a Dispose method, according to the
+                            // .NET Framework Design Guidelines:
+                            // https://github.com/dotnet/efcore/issues/12864
+                            // https://github.com/HangfireIO/Hangfire/issues/1494
+                            transaction.Rollback();
+                        }
+
+                        throw;
+                    }
 
                     return result;
                 }
@@ -279,14 +314,24 @@ namespace Hangfire.SqlServer
         {
             using (_options.ImpersonationFunc?.Invoke())
             {
-                var connection = _existingConnection ?? _connectionFactory();
+                DbConnection connection = null;
 
-                if (connection.State == ConnectionState.Closed)
+                try
                 {
-                    connection.Open();
-                }
+                    connection = _existingConnection ?? _connectionFactory();
 
-                return connection;
+                    if (connection.State == ConnectionState.Closed)
+                    {
+                        connection.Open();
+                    }
+
+                    return connection;
+                }
+                catch
+                {
+                    ReleaseConnection(connection);
+                    throw;
+                }
             }
         }
 
@@ -305,6 +350,8 @@ namespace Hangfire.SqlServer
 
         private void Initialize()
         {
+            _escapedSchemaName = _options.SchemaName.Replace("]", "]]");
+
             if (_options.PrepareSchemaIfNecessary)
             {
                 var log = LogProvider.GetLogger(typeof(SqlServerObjectsInstaller));
