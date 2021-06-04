@@ -301,6 +301,11 @@ a:hover .label-hover {
     border-color: rgb(229, 220, 195);
 }
 
+.alert-fixed {
+    border-radius: 0;
+    margin-bottom: 0;
+}
+
 .state-card {
     position: relative;
     display: block;
@@ -533,4 +538,13 @@ div.metric-null {
     #stats {
         width: 262.5px;
     }
+}
+
+/* Recurring Jobs Page */
+
+.cron-badge {
+    display: inline-block;
+    max-width: 125px;
+    white-space: normal;
+    word-break: break-word;
 }
