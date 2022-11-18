@@ -1,5 +1,4 @@
-// This file is part of Hangfire.
-// Copyright © 2013-2014 Sergey Odinokov.
+// This file is part of Hangfire. Copyright © 2013-2014 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -99,11 +98,7 @@ namespace Hangfire
 
         public void OnStateApplied(ApplyStateContext context, IWriteOnlyTransaction transaction)
         {
-            var awaitingState = context.NewState as AwaitingState;
-            if (awaitingState != null)
-            {
-                context.JobExpirationTimeout = awaitingState.Expiration;
-            }
+            // TODO: Remove this method and IApplyStateFilter interface in 2.0.0.
         }
 
         internal static List<Continuation> DeserializeContinuations(string serialized)
@@ -129,6 +124,16 @@ namespace Hangfire
             // multiple threads add continuation to the same parent job.
             using (connection.AcquireDistributedJobLock(parentId, AddJobLockTimeout))
             {
+                var jobData = connection.GetJobData(parentId);
+                if (jobData == null)
+                {
+                    // When we try to add a continuation for a removed job,
+                    // the system should throw an exception instead of creating
+                    // corrupted state.
+                    throw new InvalidOperationException(
+                        $"Can not add a continuation: parent background job '{parentId}' does not exist.");
+                }
+
                 var continuations = GetContinuations(connection, parentId);
 
                 // Continuation may be already added. This may happen, when outer transaction
@@ -142,16 +147,6 @@ namespace Hangfire
                     // exists. Otherwise we could create add non-expiring (garbage)
                     // parameter for the parent job.
                     SetContinuations(connection, parentId, continuations);
-                }
-
-                var jobData = connection.GetJobData(parentId);
-                if (jobData == null)
-                {
-                    // When we try to add a continuation for a removed job,
-                    // the system should throw an exception instead of creating
-                    // corrupted state.
-                    throw new InvalidOperationException(
-                        $"Can not add a continuation: parent background job '{parentId}' does not exist.");
                 }
 
                 var currentState = connection.GetStateData(parentId);
@@ -209,7 +204,7 @@ namespace Hangfire
                     {
                         nextState = SerializationHelper.Deserialize<IState>(currentState.Data["NextState"], SerializationOption.TypedInternal);
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ex.IsCatchableExceptionType())
                     {
                         nextState = new FailedState(ex)
                         {

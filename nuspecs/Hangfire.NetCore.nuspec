@@ -11,9 +11,13 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <licenseUrl>https://raw.github.com/HangfireIO/Hangfire/master/LICENSE.md</licenseUrl>
     <description>.NET Core's Worker Service host support for Hangfire (background job system for ASP.NET applications).</description>
-    <copyright>Copyright © 2019 Sergey Odinokov</copyright>
+    <copyright>Copyright © 2019-2022 Hangfire OÜ</copyright>
     <tags>hangfire netcore</tags>
     <releaseNotes>https://www.hangfire.io/blog/
+
+1.7.25
+• Added – More overloads for the `AddHangfireServer` extension method in .NET Core.
+• Deprecated – `UseHangfireServer` method for targets where `AddHangfireServer` one is available.
 
 1.7.20
 • Added – An overload for `AddHangfireServer` utilizing `IServiceProvider` (by @penenkel).
@@ -60,9 +64,9 @@
     <file src="..\src\Hangfire.AspNetCore\**\*.cs" target="src" exclude="**\obj*\**\*.cs" />
 
     <file src="LICENSE.md" />
-    <file src="NOTICES" />
     <file src="COPYING" />
     <file src="COPYING.LESSER" />
+    <file src="NOTICES" />
     <file src="LICENSE_STANDARD" />
     <file src="LICENSE_ROYALTYFREE" />
   </files>

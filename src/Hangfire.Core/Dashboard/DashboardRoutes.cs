@@ -1,5 +1,4 @@
-﻿// This file is part of Hangfire.
-// Copyright © 2013-2014 Sergey Odinokov.
+﻿// This file is part of Hangfire. Copyright © 2013-2014 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -24,7 +23,7 @@ namespace Hangfire.Dashboard
     {
         private static readonly string[] Javascripts =
         {
-            "jquery-2.2.4.min.js",
+            "jquery-3.6.0.min.js",
             "bootstrap.min.js",
             "moment-with-locales.min.js",
             "Chart.min.js",
@@ -35,6 +34,7 @@ namespace Hangfire.Dashboard
         private static readonly string[] Stylesheets =
         {
             "bootstrap.min.css",
+            "Chart.min.css",
             "hangfire.css"
         };
 

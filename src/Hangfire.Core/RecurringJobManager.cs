@@ -1,5 +1,4 @@
-﻿// This file is part of Hangfire.
-// Copyright © 2013-2014 Sergey Odinokov.
+﻿// This file is part of Hangfire. Copyright © 2013-2014 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -128,7 +127,7 @@ namespace Hangfire
             {
                 RecurringJobEntity.ParseCronExpression(cronExpression);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex.IsCatchableExceptionType())
             {
                 throw new ArgumentException(
                     "CRON expression is invalid. Please see the inner exception for details.",
@@ -139,6 +138,17 @@ namespace Hangfire
 
         public void Trigger(string recurringJobId)
         {
+            TriggerJob(recurringJobId);
+        }
+
+        [Obsolete("Please use the TriggerJob method with the same arguments instead. Will be removed in 2.0.0.")]
+        public string TriggerExecution([NotNull] string recurringJobId)
+        {
+            return TriggerJob(recurringJobId);
+        }
+
+        public string TriggerJob([NotNull] string recurringJobId)
+        {
             if (recurringJobId == null) throw new ArgumentNullException(nameof(recurringJobId));
 
             using (var connection = _storage.GetConnection())
@@ -147,7 +157,7 @@ namespace Hangfire
                 var now = _nowFactory();
 
                 var recurringJob = connection.GetRecurringJob(recurringJobId, _timeZoneResolver, now);
-                if (recurringJob == null) return;
+                if (recurringJob == null) return null;
 
                 if (recurringJob.Errors.Length > 0)
                 {
@@ -175,7 +185,11 @@ namespace Hangfire
                         transaction.UpdateRecurringJob(recurringJob, changedFields, nextExecution, _logger);
                         transaction.Commit();
                     }
+
+                    return backgroundJob?.Id;
                 }
+
+                return null;
             }
         }
 

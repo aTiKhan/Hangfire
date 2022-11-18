@@ -1,5 +1,4 @@
-﻿// This file is part of Hangfire.
-// Copyright © 2016 Sergey Odinokov.
+﻿// This file is part of Hangfire. Copyright © 2016 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -57,6 +56,9 @@ namespace Hangfire
             return app;
         }
 
+#if NETCOREAPP3_0 || NETSTANDARD2_0 || NET461
+        [Obsolete("Please use IServiceCollection.AddHangfireServer extension method instead in the ConfigureServices method. Will be removed in 2.0.0.")]
+#endif
         public static IApplicationBuilder UseHangfireServer(
             [NotNull] this IApplicationBuilder app,
             [CanBeNull] BackgroundJobServerOptions options = null,

@@ -1,5 +1,4 @@
-﻿// This file is part of Hangfire.
-// Copyright © 2013-2014 Sergey Odinokov.
+﻿// This file is part of Hangfire. Copyright © 2013-2014 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -54,7 +53,7 @@ namespace Hangfire.Dashboard
 
                 GetDisplayName = Expression.Lambda<Func<object, string>>(Expression.Call(converted, "get_DisplayName", null), p).Compile();
             }
-            catch
+            catch (Exception ex) when (ex.IsCatchableExceptionType())
             {
                 // Ignoring
             }
@@ -140,7 +139,7 @@ namespace Hangfire.Dashboard
                 {
                     return jobDisplayNameAttribute.Format(_page.Context, job);
                 }
-                catch (Exception)
+                catch (Exception ex) when (ex.IsCatchableExceptionType())
                 {
                     return jobDisplayNameAttribute.DisplayName;
                 }
@@ -169,7 +168,7 @@ namespace Hangfire.Dashboard
                 {
                     return displayNameProvider(_page.Context, job);
                 }
-                catch
+                catch (Exception ex) when (ex.IsCatchableExceptionType())
                 {
                     // Ignoring exceptions
                 }
@@ -180,13 +179,26 @@ namespace Hangfire.Dashboard
 
         public NonEscapedString StateLabel(string stateName)
         {
+            return StateLabel(stateName, stateName);
+        }
+
+        public NonEscapedString StateLabel(string stateName, string text, bool hover = false)
+        {
             if (String.IsNullOrWhiteSpace(stateName))
             {
                 return Raw($"<em>{HtmlEncode(Strings.Common_NoState)}</em>");
             }
 
             var style = $"background-color: {JobHistoryRenderer.GetForegroundStateColor(stateName)};";
-            return Raw($"<span class=\"label label-default\" style=\"{HtmlEncode(style)}\">{HtmlEncode(stateName)}</span>");
+            var cssSuffix = JobHistoryRenderer.GetStateCssSuffix(stateName);
+            var cssHover = hover ? "label-hover" : null;
+
+            if (cssSuffix != null)
+            {
+                return Raw($"<span class=\"label label-default {cssHover} label-state-{HtmlEncode(cssSuffix)}\">{HtmlEncode(text)}</span>");
+            }
+
+            return Raw($"<span class=\"label label-default {cssHover}\" style=\"{HtmlEncode(style)}\">{HtmlEncode(text)}</span>");
         }
 
         public NonEscapedString JobIdLink(string jobId)

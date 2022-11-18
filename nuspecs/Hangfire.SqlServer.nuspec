@@ -11,11 +11,27 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <licenseUrl>https://raw.github.com/HangfireIO/Hangfire/master/LICENSE.md</licenseUrl>
     <description>SQL Server 2008+ (including Express), SQL Server LocalDB and SQL Azure storage support for Hangfire (background job system for ASP.NET applications).</description>
-    <copyright>Copyright © 2013 Sergey Odinokov</copyright>
+    <copyright>Copyright © 2013-2022 Hangfire OÜ</copyright>
     <tags>Hangfire SqlServer SqlAzure LocalDB</tags>
     <releaseNotes>https://www.hangfire.io/blog/
 
 Please see https://docs.hangfire.io/en/latest/upgrade-guides/upgrading-to-hangfire-1.7.html to learn how to upgrade from 1.6.X.
+
+1.7.29
+• Fixed – Command batching is now fully working for the Microsoft.Data.SqlClient package (by @0xced).
+
+1.7.28
+• Fixed – Possibly fixed CPU consumption problems and high amounts of fetching queries after deploys to IIS.
+• Fixed – No more than a single long-polling query is allowed per storage instance when using sub-second polling.
+• Fixed – Don't depend on thread pool when sending heartbeats for active jobs to avoid problems when it's starved.
+
+1.7.25
+• Fixed – Avoid any blocked rows when removing inactive servers from the `Server` table.
+
+1.7.24
+• Changed – Don't use the `readcommittedlock` table hint when not required.
+• Project – Stop using `TransactionScope` class in tests, re-create database instead.
+• Project – Make it possible to run SQL Server tests on Mono on Linux.
 
 1.7.23
 • Fixed – `NotImplementedException` in `Transaction.EnlistPromotableSinglePhase` when running on Mono.
@@ -169,9 +185,9 @@ migration in Hangfire 1.8.0.
     <file src="..\src\Hangfire.SqlServer\**\*.cs" target="src" exclude="**\obj*\**\*.cs" />
 
     <file src="LICENSE.md" />
-    <file src="NOTICES" />
     <file src="COPYING" />
     <file src="COPYING.LESSER" />
+    <file src="NOTICES" />
     <file src="LICENSE_STANDARD" />
     <file src="LICENSE_ROYALTYFREE" />
   </files>

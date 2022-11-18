@@ -1,5 +1,4 @@
-// This file is part of Hangfire.
-// Copyright � 2013-2014 Sergey Odinokov.
+// This file is part of Hangfire. Copyright © 2013-2014 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -126,7 +125,7 @@ namespace Hangfire
             get { return _heartbeatInterval; }
             set
             {
-                if (value < TimeSpan.Zero || value > ServerWatchdog.MaxServerCheckInterval)
+                if (value < TimeSpan.Zero || value > ServerWatchdog.MaxHeartbeatInterval)
                 {
                     throw new ArgumentOutOfRangeException(nameof(value), $"HeartbeatInterval must be either non-negative and equal to or less than {ServerWatchdog.MaxHeartbeatInterval.Hours} hours");
                 }

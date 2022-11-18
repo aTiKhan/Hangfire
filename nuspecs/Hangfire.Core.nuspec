@@ -16,11 +16,71 @@ An easy and reliable way to perform fire-and-forget, delayed and recurring, long
 Backed by Redis, SQL Server, SQL Azure or MSMQ. This is a .NET alternative to Sidekiq, Resque and Celery.
 https://www.hangfire.io/
     </description>
-    <copyright>Copyright © 2013-2021 Sergey Odinokov</copyright>
+    <copyright>Copyright © 2013-2022 Hangfire OÜ</copyright>
     <tags>Hangfire OWIN Long-Running Background Fire-And-Forget Delayed Recurring Tasks Jobs Scheduler Threading Queues</tags>
     <releaseNotes>https://www.hangfire.io/blog/
 
 Please see https://docs.hangfire.io/en/latest/upgrade-guides/upgrading-to-hangfire-1.7.html to learn how to upgrade from 1.6.X.
+
+1.7.31
+• Added – `RecurringJob.TriggerJob` method that returns identifier of a triggered background job.
+• Added – `RecurringJobManager.TriggerJob` as a replacement for the `TriggerExecution` method.
+• Changed – Update Moment.js library used by Dashboard UI to version 2.29.4 (by @mmitchell-w).
+• Fixed – Typos in pt-BR translation (by @gumbarros and @marcelcamargo).
+• Fixed – Added missing parameter annotations for methods of the `RecurringJob` class.
+• Deprecated – `RecurringJob.Trigger` method is now obsolete, `TriggerJob` is the replacement.
+• Deprecated – `RecurringJobManager.TriggerExecution` method is now obsolete, `TriggerJob` should be used instead.
+
+1.7.30
+• Fixed – Don't consider `SecurityException` as a non-catchable one.
+• Fixed – Replace timer with a dedicated thread in `AspNetShutdownDetector` to avoid depending on thread pool.
+• Fixed – Better ASP.NET shutdown detection with yet another check based on internal state.
+• Fixed – Decrease `AspNetShutdownDetector`'s check intervals to detect shutdowns earlier.
+• Fixed – Don't wait for server stop on AppDomain unloads when hosting in IIS to avoid delaying them.
+
+1.7.29
+• Added – `RecurringJobManager.TriggerExecution` method that returns identifier of a created job.
+• Added – `GetRecurringJobIds` extension method for `JobStorageConnection` that returns only identifiers.
+• Added – `DashboardMetric.Url` property to make it possible for metrics on the Overview page to be clickable.
+• Changed – Bump Moment.js version to 2.29.3 in Dashboard UI (by @Westat-Transportation).
+• Fixed – Deserialization issues with `DateOnly` and `TimeOnly` in .NET 6.0 or other new types in CoreLib.
+• Fixed – Don't even try to catch unsafe exceptions like `OutOfMemoryException` or `StackOverflowException`.
+• Fixed – Add non-breaking space between Server Id and Status glyph on the Servers page.
+• Fixed – Problems with internal wait implementation shouldn't cause high CPU issues now, added protection and logging.
+• Fixed – Wait can't be performed now on a signaled `ManualResetEvent` instance in `BackgroundExecution`.
+
+1.7.28
+• Fixed – Reduce the number of attempts in `BackgroundJobStateChanger` to avoid infinite loops.
+• Fixed – Typos in German translation (by @saxx).
+• Fixed – Translations in Turkish translation (by @can-zengin).
+
+1.7.27
+• Added – Turkish language support for the Dashboard UI (by @csarigul).
+• Fixed – Trigger button in the Dashboard UI doesn't respect a custom time zone resolver.
+• Fixed – Dispatchers stopped when unable to add the ExecutionId data for an exception instance.
+• Fixed – Safari's zoom feature breaks the Dashboard UI (by @oguzhantopcu).
+• Fixed – Some typos in XML documentation comments (by @GitHubPang).
+
+1.7.26
+• Security – Fix "Dashboard UI accessible from outside by default since 1.7.25" regression.
+
+1.7.25
+• Changed – Upgrade Bootstrap from 3.3.7 to version 3.4.1 in Dashboard UI.
+• Changed – Upgrade Chart.js from 2.7.3 to version 2.9.4 in Dashboard UI.
+• Changed – Upgrade jQuery from 2.2.4 to version 3.6.0 in Dashboard UI.
+• Fixed – Check background job existence before adding a continuation id to job parameters.
+• Fixed – Incorrect validation for the `HeartbeatInterval` option (by @GitHubPang).
+• Fixed – Use better stacking for succeeded/failed charts in the Dashboard UI.
+• Fixed – Move explicit styles to CSS to fix possible CSP errors in Dashboard UI.
+• Fixed – Reset default sync auth filter when async one is specified in Dashboard UI.
+
+1.7.24
+• Added – Support for async auth methods via the `DashboardOptions.AsyncAuthorization` property (by @rosenbjerg).
+• Fixed – Error alert in Dashboard UI is now correctly shown when sidebar is present (by @danillewin).
+• Fixed – Reference an empty favicon in Dashboard UI to prevent backend 404s (by @dan2468).
+• Fixed – Back-to-site link text in Dashboard UI is now hidden on small screens (by @danillewin).
+• Fixed – Avoid memory leak in the `AppBuilderExtensions` class (by @LordJZ).
+• Fixed – Make the `TypeHelper` class public instead of internal to use it outside.
 
 1.7.23
 • Added – `JobId` property to `JobPerformanceException` for error logging purposes (by @Plasma).
@@ -304,9 +364,9 @@ Dashboard UI
     <file src="..\src\Hangfire.Core\**\*.cs;..\src\Hangfire.Core\**\*.cshtml" target="src" exclude="**\obj*\**\*.cs" />
 
     <file src="LICENSE.md" />
-    <file src="NOTICES" />
     <file src="COPYING" />
     <file src="COPYING.LESSER" />
+    <file src="NOTICES" />
     <file src="LICENSE_STANDARD" />
     <file src="LICENSE_ROYALTYFREE" />
   </files>
