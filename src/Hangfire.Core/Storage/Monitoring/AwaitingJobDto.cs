@@ -1,4 +1,4 @@
-﻿// This file is part of Hangfire. Copyright © 2021 Hangfire OÜ.
+// This file is part of Hangfire. Copyright © 2022 Hangfire OÜ.
 // 
 // Hangfire is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as 
@@ -13,10 +13,24 @@
 // You should have received a copy of the GNU Lesser General Public 
 // License along with Hangfire. If not, see <http://www.gnu.org/licenses/>.
 
-namespace Hangfire
+using System;
+using System.Collections.Generic;
+using Hangfire.Common;
+
+namespace Hangfire.Storage.Monitoring
 {
-    public interface IRecurringJobManagerFactory
+    public class AwaitingJobDto
     {
-        IRecurringJobManager GetManager(JobStorage storage);
+        public AwaitingJobDto()
+        {
+            InAwaitingState = true;
+        }
+
+        public Job Job { get; set; }
+        public JobLoadException LoadException { get; set; }
+        public InvocationData InvocationData { get; set; }
+        public DateTime? AwaitingAt { get; set; }
+        public bool InAwaitingState { get; set; }
+        public IDictionary<string, string> StateData { get; set; }
     }
 }

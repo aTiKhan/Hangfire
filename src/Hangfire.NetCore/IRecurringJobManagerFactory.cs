@@ -15,8 +15,13 @@
 
 namespace Hangfire
 {
-    public interface IBackgroundJobClientFactory
+    public interface IRecurringJobManagerFactoryV2 : IRecurringJobManagerFactory
     {
-        IBackgroundJobClient GetClient(JobStorage storage);
+        IRecurringJobManagerV2 GetManagerV2(JobStorage storage);
+    }
+
+    public interface IRecurringJobManagerFactory
+    {
+        IRecurringJobManager GetManager(JobStorage storage);
     }
 }

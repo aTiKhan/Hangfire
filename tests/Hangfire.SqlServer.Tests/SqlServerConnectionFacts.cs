@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using ReferencedDapper::Dapper;
@@ -596,6 +597,42 @@ select scope_identity() as Id";
                 Assert.Null(result.LoadException);
                 Assert.True(DateTime.UtcNow.AddMinutes(-1) < result.CreatedAt);
                 Assert.True(result.CreatedAt < DateTime.UtcNow.AddMinutes(1));
+                Assert.Empty(result.ParametersSnapshot);
+            }, useBatching: false, useMicrosoftDataSqlClient);
+        }
+
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void GetJobData_ReturnsResultWithParameters_WhenJobAndParametersExist(bool useMicrosoftDataSqlClient)
+        {
+            var arrangeSql = $@"
+insert into [{Constants.DefaultSchema}].Job (InvocationData, Arguments, StateName, CreatedAt)
+values (@invocationData, @arguments, @stateName, getutcdate())
+declare @id bigint = scope_identity();
+insert into [{Constants.DefaultSchema}].JobParameter ([JobId], [Name], [Value])
+values (@id, N'Param1', N'Value1'), (@id, N'Param2', 'Value2')
+select @id as Id";
+
+            UseConnections((sql, connection) =>
+            {
+                var job = Job.FromExpression(() => SampleMethod("wrong"));
+
+                var jobId = sql.Query(
+                    arrangeSql,
+                    new
+                    {
+                        invocationData = JobHelper.ToJson(InvocationData.Serialize(job)),
+                        stateName = "Succeeded",
+                        arguments = "['Arguments']"
+                    }).Single();
+
+                var result = connection.GetJobData(((long)jobId.Id).ToString());
+
+                Assert.NotNull(result);
+                Assert.Equal("SampleMethod", result.Job.Method.Name);
+                Assert.Equal(2, result.ParametersSnapshot.Count);
+                Assert.Equal("Value1", result.ParametersSnapshot["Param1"]);
+                Assert.Equal("Value2", result.ParametersSnapshot["Param2"]);
             }, useBatching: false, useMicrosoftDataSqlClient);
         }
 
@@ -856,7 +893,7 @@ select scope_identity() as Id").Single().Id.ToString();
             }
             finally
             {
-                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[JobParameter] REBUILD WITH (IGNORE_DUP_KEY = OFF)"), useBatching, useMicrosoftDataSqlClient);
+                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[JobParameter] REBUILD WITH (IGNORE_DUP_KEY = ON)"), useBatching, useMicrosoftDataSqlClient);
             }
         }
 
@@ -905,7 +942,7 @@ select scope_identity() as Id").Single().Id.ToString();
             }
             finally
             {
-                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[JobParameter] REBUILD WITH (IGNORE_DUP_KEY = OFF)"), useBatching: false, useMicrosoftDataSqlClient);
+                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[JobParameter] REBUILD WITH (IGNORE_DUP_KEY = ON)"), useBatching: false, useMicrosoftDataSqlClient);
             }
         }
 
@@ -1159,6 +1196,8 @@ values
                     "{\"WorkerCount\":4,\"Queues\":[\"critical\",\"default\"],\"StartedAt\":"),
                     server.Data);
                 Assert.NotNull(server.LastHeartbeat);
+                Assert.True(DateTime.UtcNow.AddHours(-1) < server.LastHeartbeat &&
+                            server.LastHeartbeat < DateTime.UtcNow.AddHours(1));
 
                 var context2 = new ServerContext
                 {
@@ -1232,6 +1271,9 @@ values
 
                 Assert.NotEqual(2012, servers["server1"].Year);
                 Assert.Equal(2012, servers["server2"].Year);
+
+                Assert.True(DateTime.UtcNow.AddHours(-1) < servers["server1"] &&
+                            servers["server1"] < DateTime.UtcNow.AddHours(1));
             }, useBatching: false, useMicrosoftDataSqlClient);
         }
 
@@ -1446,7 +1488,7 @@ values (@key, 0.0, @value)";
             }
             finally
             {
-                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[Hash] REBUILD WITH (IGNORE_DUP_KEY = OFF)"), useBatching, useMicrosoftDataSqlClient);
+                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[Hash] REBUILD WITH (IGNORE_DUP_KEY = ON)"), useBatching, useMicrosoftDataSqlClient);
             }
         }
 
@@ -1489,7 +1531,7 @@ values (@key, 0.0, @value)";
             }
             finally
             {
-                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[Hash] REBUILD WITH (IGNORE_DUP_KEY = OFF)"), useBatching, useMicrosoftDataSqlClient);
+                UseConnections((sql, _) => sql.Execute($"ALTER TABLE [{Constants.DefaultSchema}].[Hash] REBUILD WITH (IGNORE_DUP_KEY = ON)"), useBatching, useMicrosoftDataSqlClient);
             }
         }
 
@@ -2235,6 +2277,21 @@ values (@jobId, @name, @value)";
 
                 Assert.Equal("value", value);
             }, useBatching: false, useMicrosoftDataSqlClient);
+        }
+
+        [Theory, CleanDatabase]
+        [InlineData(false), InlineData(true)]
+        public void GetUtcDateTime_ReturnsCurrentUtcDateTime(bool useMicrosoftDataSqlClient)
+        {
+            UseConnection(connection =>
+            {
+                var dateTime = connection.GetUtcDateTime();
+                var currentDateTime = DateTime.UtcNow;
+
+                Assert.Equal(DateTimeKind.Utc, dateTime.Kind);
+                Assert.True(currentDateTime.AddMinutes(-1) < dateTime, dateTime.ToString(CultureInfo.CurrentCulture));
+                Assert.True(dateTime < currentDateTime.AddMinutes(1), dateTime.ToString(CultureInfo.CurrentCulture));
+            }, useMicrosoftDataSqlClient);
         }
 
         [Fact, CleanSerializerSettings]

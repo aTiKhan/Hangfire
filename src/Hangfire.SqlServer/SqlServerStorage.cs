@@ -17,7 +17,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
 #if FEATURE_CONFIGURATIONMANAGER
@@ -45,6 +44,19 @@ namespace Hangfire.SqlServer
         private string _escapedSchemaName;
         private SqlServerHeartbeatProcess _heartbeatProcess;
 
+        private readonly Dictionary<string, bool> _features =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                { JobStorageFeatures.JobQueueProperty, true },
+                { JobStorageFeatures.Connection.BatchedGetFirstByLowest, true },
+                { JobStorageFeatures.Connection.GetUtcDateTime, true },
+                { JobStorageFeatures.Connection.GetSetContains, false },
+                { JobStorageFeatures.Connection.LimitedGetSetCount, false },
+                { JobStorageFeatures.Transaction.AcquireDistributedLock, false },
+                { JobStorageFeatures.Transaction.CreateJob, false },
+                { JobStorageFeatures.Transaction.SetJobParameter, false }
+            };
+
         public SqlServerStorage(string nameOrConnectionString)
             : this(nameOrConnectionString, new SqlServerStorageOptions())
         {
@@ -68,7 +80,7 @@ namespace Hangfire.SqlServer
             if (options == null) throw new ArgumentNullException(nameof(options));
 
             _connectionString = GetConnectionString(nameOrConnectionString);
-            _connectionFactory = () => new SqlConnection(_connectionString);
+            _connectionFactory = DefaultConnectionFactory;
             _options = options;
 
             Initialize();
@@ -159,6 +171,15 @@ namespace Hangfire.SqlServer
         public override void WriteOptionsToLog(ILog logger)
         {
             logger.Info($"Using the following options for SQL Server job storage: Queue poll interval: {_options.QueuePollInterval}.");
+        }
+
+        public override bool HasFeature(string featureId)
+        {
+            if (featureId == null) throw new ArgumentNullException(nameof(featureId));
+
+            return _features.TryGetValue(featureId, out var isSupported) 
+                ? isSupported
+                : base.HasFeature(featureId);
         }
 
         public override string ToString()
@@ -358,6 +379,13 @@ namespace Hangfire.SqlServer
                 connection.Dispose();
             }
         }
+        
+        private DbConnection DefaultConnectionFactory()
+        {
+            var connection = _options.SqlClientFactory.CreateConnection() ?? throw new InvalidOperationException($"The provider factory ({_options.SqlClientFactory}) returned a null DbConnection.");
+            connection.ConnectionString = _connectionString;
+            return connection;
+        }
 
         private static bool IsRunningOnWindows()
         {
@@ -372,7 +400,34 @@ namespace Hangfire.SqlServer
         {
             _escapedSchemaName = _options.SchemaName.Replace("]", "]]");
 
-            if (_options.PrepareSchemaIfNecessary)
+            int? schema = null;
+
+            if (_options.TryAutoDetectSchemaDependentOptions)
+            {
+                try
+                {
+                    UseConnection(null, connection =>
+                    {
+                        schema = connection.ExecuteScalar<int>($"select top (1) [Version] from [{SchemaName}].[Schema]");
+                    });
+
+                    _options.UseRecommendedIsolationLevel = true;
+                    _options.UseIgnoreDupKeyOption = schema >= 8;
+                    _options.DisableGlobalLocks = schema >= 6;
+
+                    if (schema >= 6 && _options.DeleteExpiredBatchSize == -1)
+                    {
+                        _options.DeleteExpiredBatchSize = 50000;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var log = LogProvider.GetLogger(typeof(SqlServerStorage));
+                    log.ErrorException("Was unable to use the TryAutoDetectSchemaDependentOptions option due to an exception.", ex);
+                }
+            }
+
+            if (_options.PrepareSchemaIfNecessary && (schema == null || schema < SqlServerObjectsInstaller.LatestSchemaVersion))
             {
                 var log = LogProvider.GetLogger(typeof(SqlServerObjectsInstaller));
                 const int RetryAttempts = 3;
@@ -412,6 +467,10 @@ namespace Hangfire.SqlServer
 
             InitializeQueueProviders();
             _heartbeatProcess = new SqlServerHeartbeatProcess();
+
+            _features.Add(
+                JobStorageFeatures.Transaction.RemoveFromQueue(typeof(SqlServerTimeoutJob)),
+                _options.UseTransactionalAcknowledge);
         }
 
         private void InitializeQueueProviders()
@@ -505,6 +564,30 @@ where dbid = db_id(@name) and status != 'background'";
                         .Single();
 
                     return new Metric(value);
+                });
+            });
+
+        public static readonly DashboardMetric SchemaVersion = new DashboardMetric(
+            "sqlserver:schema",
+            "Metrics_SQLServer_SchemaVersion",
+            page =>
+            {
+                var sqlStorage = page.Storage as SqlServerStorage;
+                if (sqlStorage == null) return new Metric("???");
+
+                return sqlStorage.UseConnection(null, connection =>
+                {
+                    var sqlQuery = $@"select top(1) [Version] from [{sqlStorage.SchemaName}].[Schema]";
+                    var value = connection.Query<int>(sqlQuery).Single();
+
+                    return new Metric(value)
+                    {
+                        Style = value < SqlServerObjectsInstaller.LatestSchemaVersion
+                            ? MetricStyle.Warning
+                            : value == SqlServerObjectsInstaller.LatestSchemaVersion
+                                ? MetricStyle.Success
+                                : MetricStyle.Default
+                    };
                 });
             });
     }

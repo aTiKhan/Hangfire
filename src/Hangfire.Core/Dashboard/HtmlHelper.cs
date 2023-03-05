@@ -65,6 +65,8 @@ namespace Hangfire.Dashboard
             _page = page;
         }
 
+        public RazorPage Page => _page;
+
         public NonEscapedString Breadcrumbs(string title, [NotNull] IDictionary<string, string> items)
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
@@ -127,6 +129,11 @@ namespace Hangfire.Dashboard
 
         public string JobName(Job job)
         {
+            return JobName(job, includeQueue: true);
+        }
+
+        public string JobName(Job job, bool includeQueue)
+        {
             if (job == null)
             {
                 return Strings.Common_CannotFindTargetMethod;
@@ -174,7 +181,7 @@ namespace Hangfire.Dashboard
                 }
             }
 
-            return job.ToString();
+            return job.ToString(includeQueue);
         }
 
         public NonEscapedString StateLabel(string stateName)
@@ -208,7 +215,12 @@ namespace Hangfire.Dashboard
 
         public NonEscapedString JobNameLink(string jobId, Job job)
         {
-            return Raw($"<a class=\"job-method\" href=\"{HtmlEncode(_page.Url.JobDetails(jobId))}\">{HtmlEncode(JobName(job))}</a>");
+            return JobNameLink(jobId, job, includeQueue: true);
+        }
+
+        public NonEscapedString JobNameLink(string jobId, Job job, bool includeQueue)
+        {
+            return Raw($"<a class=\"job-method\" href=\"{HtmlEncode(_page.Url.JobDetails(jobId))}\">{HtmlEncode(JobName(job, includeQueue))}</a>");
         }
 
         public NonEscapedString RelativeTime(DateTime value)
